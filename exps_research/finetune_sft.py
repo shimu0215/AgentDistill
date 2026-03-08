@@ -28,7 +28,7 @@ from trl import (
     ModelConfig,
     DataCollatorForCompletionOnlyLM
 )
-
+from trl import DataCollatorForCompletionOnlyLM
 from train_utils.preprocess import (
     preprocess_sft_dataset,
 )

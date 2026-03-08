@@ -83,7 +83,7 @@ class AgentExperimentProcessor(ExperimentProcessor):
         # Create agent with specified configuration
         agent_kwargs = {
             "max_steps": max_steps,
-            "set_timeout: set_timeout,
+            "set_timeout": set_timeout,
         }
         if use_planning:
             agent_kwargs = {
