@@ -33,7 +33,7 @@ distill = [
   "word2number",
   "matplotlib",
   "seaborn",
-  "sympy==1.12",
+  "sympy>=1.13.3",
   "antlr4-python3-runtime==4.11.1", # ! The version needs to be compatible with sympy.
   "Pebble",
   "timeout-decorator"
