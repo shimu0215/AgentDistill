@@ -15,7 +15,7 @@ set -euo pipefail
 
 # ===== User settings =====
 ROOT_DIR="/scratch/wzhao20/AgentDistill"
-CONDA_ENV="agents"
+CONDA_ENV="/scratch/wzhao20/conda_envs/agents"
 MODEL_ID="Qwen/Qwen3-1.7B"
 DATA_PATH="data_processor/math_dataset/test/gsm_hard_500_20250507.json"
 PORT=8000
@@ -24,7 +24,10 @@ MAX_TOKENS=1024
 
 mkdir -p logs_slurm
 
+# Some clusters' /etc/bashrc assumes unset vars may exist; avoid nounset crash while sourcing.
+set +u
 source ~/.bashrc
+set -u
 module load cuda/12.6 || true
 conda activate "${CONDA_ENV}"
 cd "${ROOT_DIR}"
