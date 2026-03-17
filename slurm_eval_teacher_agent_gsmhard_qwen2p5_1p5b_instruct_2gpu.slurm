@@ -50,14 +50,14 @@ PIDS+=($!)
 
 echo "[wait] waiting for vLLM startup..."
 for _ in $(seq 1 180); do
-  if rg -q "Application startup complete" "${VLLM_LOG}"; then
+  if grep -q "Application startup complete" "${VLLM_LOG}"; then
     echo "[ok] vLLM is ready"
     break
   fi
   sleep 2
 done
 
-if ! rg -q "Application startup complete" "${VLLM_LOG}"; then
+if ! grep -q "Application startup complete" "${VLLM_LOG}"; then
   echo "[error] vLLM did not start in time"
   exit 1
 fi
