@@ -22,7 +22,10 @@ MAX_STEPS="${MAX_STEPS:-5}"
 PARALLEL_WORKERS="${PARALLEL_WORKERS:-4}"
 GPU_UTIL="${GPU_UTIL:-0.70}"
 LOG_ROOT="${LOG_ROOT:-/scratch/wzhao20/AgentDistill/logs/qa_results_python_only_eval}"
-DATA_PATH="${DATA_PATH:-/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/gsm_hard_500_20250507.json}"
+DATASETS=(
+  "${DATA_PATH_GSM:-/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/gsm_hard_500_20250507.json}"
+  "${DATA_PATH_MATH:-/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/math_500_20250414.json}"
+)
 
 MODELS=(
   "Qwen/Qwen2.5-0.5B-Instruct"
@@ -58,6 +61,7 @@ wait_for_server() {
 
 run_one_model() {
   local model_id="$1"
+  local data_path="$2"
   local model_name
   model_name="$(basename "$model_id")"
   local serve_log="$LOG_ROOT/${model_name}_serve.log"
@@ -79,7 +83,7 @@ run_one_model() {
 
   python -m exps_research.unified_framework.run_experiment \
     --experiment_type agent \
-    --data_path "$DATA_PATH" \
+    --data_path "$data_path" \
     --model_type vllm \
     --model_id "$model_id" \
     --log_folder "$LOG_ROOT" \
@@ -101,7 +105,9 @@ run_one_model() {
 
 trap cleanup EXIT INT TERM
 
-for model_id in "${MODELS[@]}"; do
-  echo "=== Evaluating $model_id on $(basename "$DATA_PATH") ==="
-  run_one_model "$model_id"
+for data_path in "${DATASETS[@]}"; do
+  for model_id in "${MODELS[@]}"; do
+    echo "=== Evaluating $model_id on $(basename "$data_path") ==="
+    run_one_model "$model_id" "$data_path"
+  done
 done
