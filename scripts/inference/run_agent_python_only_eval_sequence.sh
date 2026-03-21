@@ -16,7 +16,7 @@ export VLLM_NO_USAGE_STATS=1
 export DO_NOT_TRACK=1
 
 PORT_BASE="${PORT_BASE:-8000}"
-TP_SIZE="${TP_SIZE:-2}"
+TP_SIZE="${TP_SIZE:-1}"
 MAX_TOKENS="${MAX_TOKENS:-1024}"
 MAX_STEPS="${MAX_STEPS:-5}"
 PARALLEL_WORKERS="${PARALLEL_WORKERS:-4}"
@@ -43,6 +43,9 @@ cleanup() {
     kill "${VLLM_PID}" 2>/dev/null || true
     wait "${VLLM_PID}" 2>/dev/null || true
   fi
+  pkill -f "vllm serve" 2>/dev/null || true
+  pkill -f "serve_vllm.py" 2>/dev/null || true
+  sleep 3
 }
 
 wait_for_server() {
@@ -99,13 +102,25 @@ run_one_model() {
   local model_name
   model_name="$(basename "$model_id")"
   local serve_log="$LOG_ROOT/${model_name}_serve.log"
+  local model_tp_size="$TP_SIZE"
 
   mkdir -p "$LOG_ROOT"
   : > "$serve_log"
 
+  cleanup
+
+  case "$model_name" in
+    Qwen3-8B)
+      model_tp_size="${TP_SIZE_8B:-1}"
+      ;;
+    *)
+      model_tp_size="${TP_SIZE_SMALL:-1}"
+      ;;
+  esac
+
   python serve_vllm.py \
     --model "$model_id" \
-    --tensor-parallel-size "$TP_SIZE" \
+    --tensor-parallel-size "$model_tp_size" \
     --port "$PORT_BASE" \
     --gpu-memory-utilization "$GPU_UTIL" \
     --disable-log-requests \
