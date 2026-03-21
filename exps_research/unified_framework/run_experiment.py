@@ -273,30 +273,39 @@ def run_experiment():
     else:
         do_extract_answer = False
 
-    output_file, score_stats = score_qa_results(
-        paths["output_file"],
-        max_workers=4,
-        task_type=args.task_type,
-        single_thread=single_thread,
-        do_extract_answer=do_extract_answer
-    )
-
-    if RICH_AVAILABLE:
-        accuracy_panel = Panel(
-            f"[bold green]{score_stats['accuracy']:.2%}[/bold green]\n"
-            f"[bold]{score_stats['correct_answers']}/{score_stats['total_questions']}[/bold] correct answers",
-            title="Accuracy Results",
-            border_style="green"
+    try:
+        output_file, score_stats = score_qa_results(
+            paths["output_file"],
+            max_workers=4,
+            task_type=args.task_type,
+            single_thread=single_thread,
+            do_extract_answer=do_extract_answer
         )
-        console.print(accuracy_panel)
-    else:
-        print(f"Accuracy: {score_stats['accuracy']:.2%}")
-        print(f"Correct: {score_stats['correct_answers']}/{score_stats['total_questions']}")
 
-    # Apply filtering if applicable
-    if args.do_filtering:
-        if args.experiment_type == "agent":
-            filter_agent_trajectories(output_file)
+        if RICH_AVAILABLE:
+            accuracy_panel = Panel(
+                f"[bold green]{score_stats['accuracy']:.2%}[/bold green]\n"
+                f"[bold]{score_stats['correct_answers']}/{score_stats['total_questions']}[/bold] correct answers",
+                title="Accuracy Results",
+                border_style="green"
+            )
+            console.print(accuracy_panel)
+        else:
+            print(f"Accuracy: {score_stats['accuracy']:.2%}")
+            print(f"Correct: {score_stats['correct_answers']}/{score_stats['total_questions']}")
+
+        # Apply filtering if applicable
+        if args.do_filtering:
+            if args.experiment_type == "agent":
+                filter_agent_trajectories(output_file)
+    except FileNotFoundError as exc:
+        missing_score_key = "keys/openai-key/key.env" in str(exc)
+        if not missing_score_key:
+            raise
+        print(
+            "Scoring skipped because OpenAI scoring key file was not found: "
+            "keys/openai-key/key.env"
+        )
 
 if __name__ == "__main__":
     run_experiment()
