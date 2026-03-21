@@ -83,11 +83,9 @@ is_completed() {
   local model_id="$1"
   local data_path="$2"
   local result_file
-  local summary_file
   result_file="$(output_file_for "$model_id" "$data_path")"
-  summary_file="$(scored_summary_for "$result_file")"
 
-  if [[ -f "$result_file" ]] && [[ -f "$summary_file" ]]; then
+  if [[ -f "$result_file" ]]; then
     if [[ "$(wc -l < "$result_file")" -ge 500 ]]; then
       return 0
     fi
