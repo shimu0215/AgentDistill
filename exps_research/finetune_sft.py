@@ -26,9 +26,14 @@ from trl import (
     SFTTrainer,
     SFTConfig,
     ModelConfig,
-    DataCollatorForCompletionOnlyLM
 )
-from trl import DataCollatorForCompletionOnlyLM
+try:
+    from trl import DataCollatorForCompletionOnlyLM
+except ImportError:
+    try:
+        from trl.trainer.utils import DataCollatorForCompletionOnlyLM
+    except ImportError:
+        from trl.trainer.sft_trainer import DataCollatorForCompletionOnlyLM
 from train_utils.preprocess import (
     preprocess_sft_dataset,
 )
