@@ -1,7 +1,7 @@
 import os
 import json
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 from smolagents import OpenAIServerModel
 from datetime import datetime
 from pathlib import Path
@@ -97,7 +97,7 @@ Output your evaluation as a JSON object with two fields:
     }
 
 def evaluate_math_answer(
-    model: OpenAIServerModel,
+    model: Optional[OpenAIServerModel],
     predicted: str,
     gold: str,
     question: str,
@@ -211,8 +211,12 @@ def score_qa_results(
                 continue # Invalid entry
             entries.append(entry)
 
-    # Create a pool of models
-    models = [setup_scoring_model() for _ in range(max_workers)]
+    # Only factual tasks need an external scoring model. Math tasks are scored
+    # locally via qwen_math_parser + math_equal.
+    if task_type == "fact":
+        models = [setup_scoring_model() for _ in range(max_workers)]
+    else:
+        models = [None for _ in range(max_workers)]
     # Process entries in parallel
     if single_thread:
         # Process entries sequentially with a for-loop
