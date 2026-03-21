@@ -43,6 +43,12 @@ MODEL_IDENTIFIERS = {
     "Qwen/Qwen2.5-3B-Instruct": "qwen-3B-instruct",
     "Qwen/Qwen2.5-7B-Instruct": "qwen-7B-instruct",
     "Qwen/Qwen2.5-Coder-1.5B-Instruct": "qwen-coder-1.5B-instruct",
+    "Qwen/Qwen3-0.6B": "qwen3-0.6B",
+    "Qwen/Qwen3-1.7B": "qwen3-1.7B",
+    "Qwen/Qwen3-4B": "qwen3-4B",
+    "Qwen/Qwen3-8B": "qwen3-8B",
+    "Qwen/Qwen3-14B": "qwen3-14B",
+    "Qwen/Qwen3-32B": "qwen3-32B",
     "microsoft/Phi-3-mini-128k-instruct": "phi-3-mini-instruct",
     "microsoft/Phi-4-mini-instruct": "phi-4-mini-instruct",
 }
@@ -117,8 +123,7 @@ def main(args):
         layer_name = "Qwen2DecoderLayer"
 
     if args.model_name not in MODEL_IDENTIFIERS.keys() and "training_outputs" not in args.model_name:
-        import pdb; pdb.set_trace()
-        args.model_name = "meta-llama/Llama-3.2-1B-Instruct"
+        raise NotImplementedError(f"Unsupported model for agent distillation: {args.model_name}")
 
     if not args.full_finetuning:
         if args.peft_name:

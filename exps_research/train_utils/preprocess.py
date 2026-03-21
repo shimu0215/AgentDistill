@@ -175,7 +175,10 @@ def clean_messages(messages):
 def preprocess_logs(log_path):
     prompt_template = PROMPT_TEMPLATES["system_prompt_short"]
 
-    tools = [WikipediaRetrieverTool()]
+    if "python_only" in log_path:
+        tools = []
+    else:
+        tools = [WikipediaRetrieverTool()]
     tools = {tool.name: tool for tool in tools}
     tools.setdefault("final_answer", FinalAnswerTool())
 
