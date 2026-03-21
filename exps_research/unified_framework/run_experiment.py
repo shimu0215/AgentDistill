@@ -69,7 +69,7 @@ def run_experiment():
     parser.add_argument("--suffix", type=str, help="suffix for saved filename")
 
     # Agent-specific arguments
-    parser.add_argument("--search_engine_type", type=str, default="wikipedia", help="Search engine for agent tool")
+    parser.add_argument("--search_engine_type", type=str, default="wikipedia", help="Agent tool mode: wikipedia, duckduckgo, or python_only")
     parser.add_argument("--max_steps", type=int, default=5, help="Maximum number of steps for agent")
     parser.add_argument("--use_planning", action="store_true", help="Enable planning in agent")
     parser.add_argument("--prefix_memory", type=str, help="Path for prefix memory")
@@ -166,7 +166,7 @@ def run_experiment():
     if args.experiment_type == "agent":
         extra_kwargs["search_engine_type"] = args.search_engine_type
         if args.search_engine_type != "wikipedia":
-            additional_postfix.append("duckduckgo")
+            additional_postfix.append(args.search_engine_type)
         extra_kwargs["max_steps"] = args.max_steps
         extra_kwargs["use_planning"] = args.use_planning
         if args.use_planning:

@@ -42,7 +42,7 @@ class AgentExperimentProcessor(ExperimentProcessor):
             entry: Dictionary containing a question
             model: Model instance
             **kwargs: Additional parameters including:
-                - search_engine_type: "wikipedia" or "duckduckgo"
+                - search_engine_type: "wikipedia", "duckduckgo", or "python_only"
                 - max_steps: Maximum number of steps for the agent
                 - fine_tuned: Whether using a fine-tuned model
                 - set_timeout: Whether to set timeouts for code execution
@@ -75,7 +75,9 @@ class AgentExperimentProcessor(ExperimentProcessor):
             self.console.print(Panel(entry['question'], title="Question", border_style="green"))
 
         # Configure tools based on search engine type
-        if search_engine_type == "duckduckgo":
+        if search_engine_type == "python_only":
+            tools = []
+        elif search_engine_type == "duckduckgo":
             tools = [DuckDuckGoSearchTool()]
         else:  # Default to Wikipedia
             tools = [WikipediaRetrieverTool()]
