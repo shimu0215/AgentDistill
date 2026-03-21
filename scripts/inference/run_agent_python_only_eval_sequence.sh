@@ -59,6 +59,42 @@ wait_for_server() {
   done
 }
 
+output_file_for() {
+  local model_id="$1"
+  local data_path="$2"
+  local model_name
+  local dataset_name
+  model_name="$(basename "$model_id")"
+  dataset_name="$(basename "$data_path" .json)_test"
+  printf "%s/%s/%s_temp=0.0_seed=42_type=agent_steps=5_python_only.jsonl" \
+    "$LOG_ROOT" "$dataset_name" "$model_name"
+}
+
+scored_summary_for() {
+  local result_file="$1"
+  local result_dir
+  local base_name
+  result_dir="$(dirname "$result_file")"
+  base_name="$(basename "$result_file" .jsonl)"
+  printf "%s/evaluations/evaluation_summary_%s.json" "$result_dir" "$base_name"
+}
+
+is_completed() {
+  local model_id="$1"
+  local data_path="$2"
+  local result_file
+  local summary_file
+  result_file="$(output_file_for "$model_id" "$data_path")"
+  summary_file="$(scored_summary_for "$result_file")"
+
+  if [[ -f "$result_file" ]] && [[ -f "$summary_file" ]]; then
+    if [[ "$(wc -l < "$result_file")" -ge 500 ]]; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
 run_one_model() {
   local model_id="$1"
   local data_path="$2"
@@ -107,6 +143,10 @@ trap cleanup EXIT INT TERM
 
 for data_path in "${DATASETS[@]}"; do
   for model_id in "${MODELS[@]}"; do
+    if is_completed "$model_id" "$data_path"; then
+      echo "=== Skipping completed $model_id on $(basename "$data_path") ==="
+      continue
+    fi
     echo "=== Evaluating $model_id on $(basename "$data_path") ==="
     run_one_model "$model_id" "$data_path"
   done
