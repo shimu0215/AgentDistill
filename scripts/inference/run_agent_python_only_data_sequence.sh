@@ -33,7 +33,7 @@ MODELS=(
   "Qwen/Qwen3-14B"
 )
 
-SEEDS=(42 43 44 45 46)
+SEEDS=(42 43 44 45 46 47 48 49 50 51 52 53 54 55 56)
 
 VLLM_PID=""
 
@@ -56,6 +56,26 @@ wait_for_server() {
     sleep 5
     waited=$((waited + 5))
   done
+}
+
+result_jsonl_path() {
+  local model_id="$1"
+  local data_path="$2"
+  local seed="$3"
+  local model_name
+  model_name="$(basename "$model_id")"
+  local dataset_name
+  dataset_name="$(basename "$data_path" .json)"
+  printf "%s/%s_test/%s_temp=0.7_seed=%s_type=agent_steps=%s_python_only_python_only_seed%s.jsonl" \
+    "$LOG_ROOT" "$dataset_name" "$model_name" "$seed" "$MAX_STEPS" "$seed"
+}
+
+is_completed_run() {
+  local result_path="$1"
+  [[ -f "$result_path" ]] || return 1
+  local line_count
+  line_count="$(wc -l < "$result_path" 2>/dev/null || echo 0)"
+  [[ "$line_count" -ge 500 ]]
 }
 
 run_one_pass() {
@@ -92,7 +112,7 @@ run_one_model() {
   dataset_name="$(basename "$data_path" .json)"
   local serve_log="$LOG_ROOT/${model_name}_${dataset_name}_serve.log"
 
-  mkdir -p "$LOG_ROOT"
+  mkdir -p "$LOG_ROOT" "$LOG_ROOT/${dataset_name}_test"
   : > "$serve_log"
 
   python serve_vllm.py \
@@ -108,6 +128,12 @@ run_one_model() {
   wait_for_server "$serve_log"
 
   for seed in "${SEEDS[@]}"; do
+    local result_path
+    result_path="$(result_jsonl_path "$model_id" "$data_path" "$seed")"
+    if is_completed_run "$result_path"; then
+      echo "=== Skipping completed $model_id on $(basename "$data_path") seed=$seed ==="
+      continue
+    fi
     echo "=== Generating $model_id on $(basename "$data_path") seed=$seed ==="
     run_one_pass "$model_id" "$data_path" "$seed"
   done
