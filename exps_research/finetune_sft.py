@@ -27,13 +27,6 @@ from trl import (
     SFTConfig,
     ModelConfig,
 )
-try:
-    from trl import DataCollatorForCompletionOnlyLM
-except ImportError:
-    try:
-        from trl.trainer.utils import DataCollatorForCompletionOnlyLM
-    except ImportError:
-        from trl.trainer.sft_trainer import DataCollatorForCompletionOnlyLM
 from train_utils.preprocess import (
     preprocess_sft_dataset,
 )
@@ -248,6 +241,13 @@ def main(args):
             tokenizer=tokenizer
         )
     else:
+        try:
+            from trl import DataCollatorForCompletionOnlyLM
+        except ImportError:
+            try:
+                from trl.trainer.utils import DataCollatorForCompletionOnlyLM
+            except ImportError:
+                from trl.trainer.sft_trainer import DataCollatorForCompletionOnlyLM
         collator = DataCollatorForCompletionOnlyLM(
             response_template,
             instruction_template=instruction_template,
