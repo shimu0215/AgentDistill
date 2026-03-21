@@ -42,6 +42,9 @@ cleanup() {
     kill "${VLLM_PID}" 2>/dev/null || true
     wait "${VLLM_PID}" 2>/dev/null || true
   fi
+  pkill -f "vllm serve" 2>/dev/null || true
+  pkill -f "serve_vllm.py" 2>/dev/null || true
+  sleep 5
 }
 
 wait_for_server() {
@@ -111,15 +114,30 @@ run_one_model() {
   local dataset_name
   dataset_name="$(basename "$data_path" .json)"
   local serve_log="$LOG_ROOT/${model_name}_${dataset_name}_serve.log"
+  local model_tp_size="$TP_SIZE"
+  local model_gpu_util="$GPU_UTIL"
 
   mkdir -p "$LOG_ROOT" "$LOG_ROOT/${dataset_name}_test"
   : > "$serve_log"
 
+  cleanup
+
+  case "$model_name" in
+    Qwen3-32B)
+      model_tp_size="${TP_SIZE_32B:-4}"
+      model_gpu_util="${GPU_UTIL_32B:-0.85}"
+      ;;
+    Qwen3-14B)
+      model_tp_size="${TP_SIZE_14B:-4}"
+      model_gpu_util="${GPU_UTIL_14B:-0.50}"
+      ;;
+  esac
+
   python serve_vllm.py \
     --model "$model_id" \
-    --tensor-parallel-size "$TP_SIZE" \
+    --tensor-parallel-size "$model_tp_size" \
     --port "$PORT_BASE" \
-    --gpu-memory-utilization "$GPU_UTIL" \
+    --gpu-memory-utilization "$model_gpu_util" \
     --disable-log-requests \
     --disable-log-stats \
     > "$serve_log" 2>&1 &

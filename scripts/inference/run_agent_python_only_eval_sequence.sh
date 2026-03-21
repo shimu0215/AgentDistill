@@ -110,6 +110,9 @@ run_one_model() {
   cleanup
 
   case "$model_name" in
+    Qwen3-4B)
+      model_tp_size="${TP_SIZE_4B:-1}"
+      ;;
     Qwen3-8B)
       model_tp_size="${TP_SIZE_8B:-1}"
       ;;
