@@ -22,6 +22,10 @@ MAX_STEPS="${MAX_STEPS:-5}"
 PARALLEL_WORKERS="${PARALLEL_WORKERS:-4}"
 GPU_UTIL="${GPU_UTIL:-0.85}"
 LOG_ROOT="${LOG_ROOT:-/scratch/wzhao20/AgentDistill/logs/qa_results_python_only_teacher}"
+STALL_POLL_SECONDS="${STALL_POLL_SECONDS:-30}"
+STALL_TIMEOUT_SECONDS="${STALL_TIMEOUT_SECONDS:-900}"
+NEAR_COMPLETE_LINES="${NEAR_COMPLETE_LINES:-499}"
+NEAR_COMPLETE_RETRIES="${NEAR_COMPLETE_RETRIES:-3}"
 
 DATASETS=(
   "/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/gsm_hard_500_20250507.json"
@@ -81,6 +85,15 @@ is_completed_run() {
   [[ "$line_count" -ge 500 ]]
 }
 
+current_line_count() {
+  local result_path="$1"
+  if [[ -f "$result_path" ]]; then
+    wc -l < "$result_path" 2>/dev/null || echo 0
+  else
+    echo 0
+  fi
+}
+
 run_one_pass() {
   local model_id="$1"
   local data_path="$2"
@@ -104,6 +117,68 @@ run_one_pass() {
     --search_engine_type python_only \
     --use_single_endpoint \
     --suffix "python_only_seed${seed}"
+}
+
+run_one_pass_with_retries() {
+  local model_id="$1"
+  local data_path="$2"
+  local seed="$3"
+  local result_path="$4"
+  local attempt=0
+
+  while (( attempt <= NEAR_COMPLETE_RETRIES )); do
+    local before_lines last_lines stalled_for run_pid
+    before_lines="$(current_line_count "$result_path")"
+    last_lines="$before_lines"
+    stalled_for=0
+
+    run_one_pass "$model_id" "$data_path" "$seed" &
+    run_pid=$!
+
+    while kill -0 "$run_pid" 2>/dev/null; do
+      sleep "$STALL_POLL_SECONDS"
+      local now_lines
+      now_lines="$(current_line_count "$result_path")"
+
+      if (( now_lines > last_lines )); then
+        last_lines="$now_lines"
+        stalled_for=0
+      else
+        stalled_for=$((stalled_for + STALL_POLL_SECONDS))
+      fi
+
+      if (( now_lines >= NEAR_COMPLETE_LINES && stalled_for >= STALL_TIMEOUT_SECONDS )); then
+        echo "Stalled near completion for $model_id on $(basename "$data_path") seed=$seed at ${now_lines}/500 after ${stalled_for}s."
+        kill "$run_pid" 2>/dev/null || true
+        wait "$run_pid" 2>/dev/null || true
+        break
+      fi
+    done
+
+    if wait "$run_pid"; then
+      if is_completed_run "$result_path"; then
+        return 0
+      fi
+    fi
+
+    local after_lines
+    after_lines="$(current_line_count "$result_path")"
+    if is_completed_run "$result_path"; then
+      return 0
+    fi
+    if (( after_lines < NEAR_COMPLETE_LINES )); then
+      return 1
+    fi
+
+    attempt=$((attempt + 1))
+    if (( attempt > NEAR_COMPLETE_RETRIES )); then
+      echo "Exceeded near-complete retries for $model_id on $(basename "$data_path") seed=$seed at ${after_lines}/500. Skipping this seed."
+      return 0
+    fi
+    echo "Retrying near-complete $model_id on $(basename "$data_path") seed=$seed (attempt ${attempt}/${NEAR_COMPLETE_RETRIES})."
+    pkill -f "run_experiment --experiment_type agent --data_path $data_path" 2>/dev/null || true
+    sleep 5
+  done
 }
 
 run_one_model() {
@@ -153,7 +228,7 @@ run_one_model() {
       continue
     fi
     echo "=== Generating $model_id on $(basename "$data_path") seed=$seed ==="
-    run_one_pass "$model_id" "$data_path" "$seed"
+    run_one_pass_with_retries "$model_id" "$data_path" "$seed" "$result_path"
   done
 
   cleanup
