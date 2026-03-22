@@ -26,6 +26,7 @@ STALL_POLL_SECONDS="${STALL_POLL_SECONDS:-30}"
 STALL_TIMEOUT_SECONDS="${STALL_TIMEOUT_SECONDS:-900}"
 NEAR_COMPLETE_LINES="${NEAR_COMPLETE_LINES:-499}"
 NEAR_COMPLETE_RETRIES="${NEAR_COMPLETE_RETRIES:-3}"
+KILL_GRACE_SECONDS="${KILL_GRACE_SECONDS:-10}"
 
 DATASETS=(
   "/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/gsm_hard_500_20250507.json"
@@ -79,6 +80,9 @@ result_jsonl_path() {
 
 is_completed_run() {
   local result_path="$1"
+  if [[ -f "${result_path}.skip" ]]; then
+    return 0
+  fi
   [[ -f "$result_path" ]] || return 1
   local line_count
   line_count="$(wc -l < "$result_path" 2>/dev/null || echo 0)"
@@ -94,29 +98,42 @@ current_line_count() {
   fi
 }
 
-run_one_pass() {
+build_run_one_pass_cmd() {
   local model_id="$1"
   local data_path="$2"
   local seed="$3"
 
-  python -m exps_research.unified_framework.run_experiment \
-    --experiment_type agent \
-    --data_path "$data_path" \
-    --model_type vllm \
-    --model_id "$model_id" \
-    --log_folder "$LOG_ROOT" \
-    --max_tokens "$MAX_TOKENS" \
-    --multithreading \
-    --use_process_pool \
-    --parallel_workers "$PARALLEL_WORKERS" \
-    --n 1 \
-    --temperature 0.7 \
-    --top_p 0.8 \
-    --seed "$seed" \
-    --max_steps "$MAX_STEPS" \
-    --search_engine_type python_only \
-    --use_single_endpoint \
+  local -a cmd=(
+    python -m exps_research.unified_framework.run_experiment
+    --experiment_type agent
+    --data_path "$data_path"
+    --model_type vllm
+    --model_id "$model_id"
+    --log_folder "$LOG_ROOT"
+    --max_tokens "$MAX_TOKENS"
+    --multithreading
+    --use_process_pool
+    --parallel_workers "$PARALLEL_WORKERS"
+    --n 1
+    --temperature 0.7
+    --top_p 0.8
+    --seed "$seed"
+    --max_steps "$MAX_STEPS"
+    --search_engine_type python_only
+    --use_single_endpoint
     --suffix "python_only_seed${seed}"
+  )
+  printf '%q ' "${cmd[@]}"
+}
+
+terminate_run_group() {
+  local pgid="$1"
+
+  kill -TERM -- "-${pgid}" 2>/dev/null || true
+  sleep "$KILL_GRACE_SECONDS"
+  if kill -0 "$pgid" 2>/dev/null; then
+    kill -KILL -- "-${pgid}" 2>/dev/null || true
+  fi
 }
 
 run_one_pass_with_retries() {
@@ -132,7 +149,9 @@ run_one_pass_with_retries() {
     last_lines="$before_lines"
     stalled_for=0
 
-    run_one_pass "$model_id" "$data_path" "$seed" &
+    local cmd_str
+    cmd_str="$(build_run_one_pass_cmd "$model_id" "$data_path" "$seed")"
+    setsid bash -lc "cd '$ROOT_DIR' && exec $cmd_str" &
     run_pid=$!
 
     while kill -0 "$run_pid" 2>/dev/null; do
@@ -149,7 +168,7 @@ run_one_pass_with_retries() {
 
       if (( now_lines >= NEAR_COMPLETE_LINES && stalled_for >= STALL_TIMEOUT_SECONDS )); then
         echo "Stalled near completion for $model_id on $(basename "$data_path") seed=$seed at ${now_lines}/500 after ${stalled_for}s."
-        kill "$run_pid" 2>/dev/null || true
+        terminate_run_group "$run_pid"
         wait "$run_pid" 2>/dev/null || true
         break
       fi
@@ -173,6 +192,7 @@ run_one_pass_with_retries() {
     attempt=$((attempt + 1))
     if (( attempt > NEAR_COMPLETE_RETRIES )); then
       echo "Exceeded near-complete retries for $model_id on $(basename "$data_path") seed=$seed at ${after_lines}/500. Skipping this seed."
+      touch "${result_path}.skip"
       return 0
     fi
     echo "Retrying near-complete $model_id on $(basename "$data_path") seed=$seed (attempt ${attempt}/${NEAR_COMPLETE_RETRIES})."
