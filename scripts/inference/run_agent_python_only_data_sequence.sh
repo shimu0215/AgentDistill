@@ -31,6 +31,8 @@ KILL_GRACE_SECONDS="${KILL_GRACE_SECONDS:-10}"
 DATASETS=(
   "/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/gsm_hard_500_20250507.json"
   "/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/math_500_20250414.json"
+  "/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/aime_90_20250504.json"
+  "/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/olymath_200_20250511.json"
 )
 
 MODELS=(
