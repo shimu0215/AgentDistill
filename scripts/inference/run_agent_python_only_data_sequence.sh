@@ -26,6 +26,7 @@ STALL_POLL_SECONDS="${STALL_POLL_SECONDS:-30}"
 STALL_TIMEOUT_SECONDS="${STALL_TIMEOUT_SECONDS:-900}"
 NEAR_COMPLETE_LINES="${NEAR_COMPLETE_LINES:-499}"
 NEAR_COMPLETE_RETRIES="${NEAR_COMPLETE_RETRIES:-3}"
+SEED_RETRIES="${SEED_RETRIES:-3}"
 KILL_GRACE_SECONDS="${KILL_GRACE_SECONDS:-10}"
 
 DEFAULT_DATASETS=(
@@ -280,7 +281,30 @@ run_one_model() {
       continue
     fi
     echo "=== Generating $model_id on $(basename "$data_path") seed=$seed ==="
-    run_one_pass_with_retries "$model_id" "$data_path" "$seed" "$result_path" "$expected_lines"
+    local seed_attempt=1
+    while (( seed_attempt <= SEED_RETRIES )); do
+      if run_one_pass_with_retries "$model_id" "$data_path" "$seed" "$result_path" "$expected_lines"; then
+        break
+      fi
+      echo "Seed-level retry for $model_id on $(basename "$data_path") seed=$seed (attempt ${seed_attempt}/${SEED_RETRIES})."
+      seed_attempt=$((seed_attempt + 1))
+      cleanup
+      python serve_vllm.py \
+        --model "$model_id" \
+        --tensor-parallel-size "$model_tp_size" \
+        --port "$PORT_BASE" \
+        --gpu-memory-utilization "$model_gpu_util" \
+        --disable-log-requests \
+        --disable-log-stats \
+        > "$serve_log" 2>&1 &
+      VLLM_PID=$!
+      wait_for_server "$serve_log"
+    done
+
+    if ! is_completed_run "$result_path" "$expected_lines"; then
+      echo "Exceeded seed-level retries for $model_id on $(basename "$data_path") seed=$seed. Marking skip and continuing."
+      touch "${result_path}.skip"
+    fi
   done
 
   cleanup
