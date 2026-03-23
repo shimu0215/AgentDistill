@@ -44,6 +44,20 @@ SEEDS=(42 43 44 45 46 47 48 49 50 51 52 53 54 55 56)
 
 VLLM_PID=""
 
+expected_line_count() {
+  local data_path="$1"
+  python - "$data_path" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path) as f:
+    data = json.load(f)
+if isinstance(data, dict) and "examples" in data:
+    print(len(data["examples"]))
+else:
+    print(len(data))
+PY
+}
+
 cleanup() {
   if [[ -n "${VLLM_PID}" ]] && kill -0 "${VLLM_PID}" 2>/dev/null; then
     kill "${VLLM_PID}" 2>/dev/null || true
@@ -82,13 +96,14 @@ result_jsonl_path() {
 
 is_completed_run() {
   local result_path="$1"
+  local expected_lines="$2"
   if [[ -f "${result_path}.skip" ]]; then
     return 0
   fi
   [[ -f "$result_path" ]] || return 1
   local line_count
   line_count="$(wc -l < "$result_path" 2>/dev/null || echo 0)"
-  [[ "$line_count" -ge 500 ]]
+  [[ "$line_count" -ge "$expected_lines" ]]
 }
 
 current_line_count() {
@@ -143,6 +158,8 @@ run_one_pass_with_retries() {
   local data_path="$2"
   local seed="$3"
   local result_path="$4"
+  local expected_lines="$5"
+  local near_complete_lines="$(( expected_lines > 1 ? expected_lines - 1 : expected_lines ))"
   local attempt=0
 
   while (( attempt <= NEAR_COMPLETE_RETRIES )); do
@@ -168,8 +185,8 @@ run_one_pass_with_retries() {
         stalled_for=$((stalled_for + STALL_POLL_SECONDS))
       fi
 
-      if (( now_lines >= NEAR_COMPLETE_LINES && stalled_for >= STALL_TIMEOUT_SECONDS )); then
-        echo "Stalled near completion for $model_id on $(basename "$data_path") seed=$seed at ${now_lines}/500 after ${stalled_for}s."
+      if (( now_lines >= near_complete_lines && stalled_for >= STALL_TIMEOUT_SECONDS )); then
+        echo "Stalled near completion for $model_id on $(basename "$data_path") seed=$seed at ${now_lines}/${expected_lines} after ${stalled_for}s."
         terminate_run_group "$run_pid"
         wait "$run_pid" 2>/dev/null || true
         break
@@ -177,23 +194,23 @@ run_one_pass_with_retries() {
     done
 
     if wait "$run_pid"; then
-      if is_completed_run "$result_path"; then
+      if is_completed_run "$result_path" "$expected_lines"; then
         return 0
       fi
     fi
 
     local after_lines
     after_lines="$(current_line_count "$result_path")"
-    if is_completed_run "$result_path"; then
+    if is_completed_run "$result_path" "$expected_lines"; then
       return 0
     fi
-    if (( after_lines < NEAR_COMPLETE_LINES )); then
+    if (( after_lines < near_complete_lines )); then
       return 1
     fi
 
     attempt=$((attempt + 1))
     if (( attempt > NEAR_COMPLETE_RETRIES )); then
-      echo "Exceeded near-complete retries for $model_id on $(basename "$data_path") seed=$seed at ${after_lines}/500. Skipping this seed."
+      echo "Exceeded near-complete retries for $model_id on $(basename "$data_path") seed=$seed at ${after_lines}/${expected_lines}. Skipping this seed."
       touch "${result_path}.skip"
       return 0
     fi
@@ -213,6 +230,8 @@ run_one_model() {
   local serve_log="$LOG_ROOT/${model_name}_${dataset_name}_serve.log"
   local model_tp_size="$TP_SIZE"
   local model_gpu_util="$GPU_UTIL"
+  local expected_lines
+  expected_lines="$(expected_line_count "$data_path")"
 
   mkdir -p "$LOG_ROOT" "$LOG_ROOT/${dataset_name}_test"
   : > "$serve_log"
@@ -245,12 +264,12 @@ run_one_model() {
   for seed in "${SEEDS[@]}"; do
     local result_path
     result_path="$(result_jsonl_path "$model_id" "$data_path" "$seed")"
-    if is_completed_run "$result_path"; then
+    if is_completed_run "$result_path" "$expected_lines"; then
       echo "=== Skipping completed $model_id on $(basename "$data_path") seed=$seed ==="
       continue
     fi
     echo "=== Generating $model_id on $(basename "$data_path") seed=$seed ==="
-    run_one_pass_with_retries "$model_id" "$data_path" "$seed" "$result_path"
+    run_one_pass_with_retries "$model_id" "$data_path" "$seed" "$result_path" "$expected_lines"
   done
 
   cleanup
