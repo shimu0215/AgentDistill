@@ -28,17 +28,28 @@ NEAR_COMPLETE_LINES="${NEAR_COMPLETE_LINES:-499}"
 NEAR_COMPLETE_RETRIES="${NEAR_COMPLETE_RETRIES:-3}"
 KILL_GRACE_SECONDS="${KILL_GRACE_SECONDS:-10}"
 
-DATASETS=(
+DEFAULT_DATASETS=(
   "/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/gsm_hard_500_20250507.json"
   "/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/math_500_20250414.json"
   "/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/aime_90_20250504.json"
   "/scratch/wzhao20/AgentDistill/data_processor/math_dataset/test/olymath_200_20250511.json"
 )
 
-MODELS=(
+DEFAULT_MODELS=(
   "Qwen/Qwen3-32B"
   "Qwen/Qwen3-14B"
 )
+
+DATASETS=("${DEFAULT_DATASETS[@]}")
+MODELS=("${DEFAULT_MODELS[@]}")
+
+if [[ -n "${DATASET_LIST:-}" ]]; then
+  IFS=',' read -r -a DATASETS <<< "$DATASET_LIST"
+fi
+
+if [[ -n "${MODEL_LIST:-}" ]]; then
+  IFS=',' read -r -a MODELS <<< "$MODEL_LIST"
+fi
 
 SEEDS=(42 43 44 45 46 47 48 49 50 51 52 53 54 55 56)
 
