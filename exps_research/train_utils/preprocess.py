@@ -3,6 +3,7 @@ import json
 import yaml
 import importlib
 import re
+from collections import defaultdict
 from datasets import Dataset
 from pathlib import Path
 from rich.console import Console
@@ -218,6 +219,38 @@ def preprocess_logs(log_path):
     print("##### Planning data", n_planning)
     dataset = Dataset.from_list(dataset)
     return dataset
+
+
+def preprocess_grouped_logs(log_paths):
+    prompt_template = PROMPT_TEMPLATES["system_prompt_short"]
+
+    uses_python_only = any("python_only" in log_path for log_path in log_paths)
+    if uses_python_only:
+        tools = []
+    else:
+        tools = [WikipediaRetrieverTool()]
+    tools = {tool.name: tool for tool in tools}
+    tools.setdefault("final_answer", FinalAnswerTool())
+
+    system_prompt = populate_template(
+        prompt_template,
+        variables={
+            "tools": tools
+        }
+    )
+
+    grouped = defaultdict(list)
+    for log_path in log_paths:
+        logs = load_file_from_path(log_path)
+        for log in logs:
+            if not log.get("log_data"):
+                continue
+
+            messages = clean_messages(log["log_data"]["messages"])
+            messages[0]["content"] = system_prompt
+            grouped[log["question"]].append({"messages": messages})
+
+    return list(grouped.values())
 
 # Preprocess logs for the reward modeling
 def preprocess_reward_dataset(log_path):

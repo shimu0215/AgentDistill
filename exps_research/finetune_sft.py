@@ -29,6 +29,7 @@ from trl import (
 )
 from train_utils.preprocess import (
     preprocess_sft_dataset,
+    preprocess_grouped_logs,
 )
 from train_utils.utils import DataCollatorForCompletionOnlyLMMultiTurn
 
@@ -50,6 +51,55 @@ MODEL_IDENTIFIERS = {
     "microsoft/Phi-3-mini-128k-instruct": "phi-3-mini-instruct",
     "microsoft/Phi-4-mini-instruct": "phi-4-mini-instruct",
 }
+
+
+class RandomTrajectoryDataset(torch.utils.data.Dataset):
+    def __init__(self, grouped_examples):
+        self.grouped_examples = grouped_examples
+
+    def __len__(self):
+        return len(self.grouped_examples)
+
+    def __getitem__(self, idx):
+        choices = self.grouped_examples[idx]
+        return random.choice(choices)
+
+
+class EntropyRegularizedSFTTrainer(SFTTrainer):
+    def __init__(self, *args, entropy_lambda: float = 0.0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.entropy_lambda = entropy_lambda
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        labels = inputs.get("labels")
+        outputs = model(**inputs)
+        logits = outputs.logits
+
+        if labels is None:
+            loss = outputs.loss
+            return (loss, outputs) if return_outputs else loss
+
+        shifted_logits = logits[..., :-1, :].contiguous()
+        shifted_labels = labels[..., 1:].contiguous()
+        loss_fct = torch.nn.CrossEntropyLoss(ignore_index=-100)
+        sft_loss = loss_fct(
+            shifted_logits.view(-1, shifted_logits.size(-1)),
+            shifted_labels.view(-1),
+        )
+
+        valid_mask = shifted_labels.ne(-100)
+        if torch.any(valid_mask):
+            log_probs = torch.log_softmax(shifted_logits.float(), dim=-1)
+            probs = log_probs.exp()
+            token_entropy = -(probs * log_probs).sum(dim=-1)
+            entropy = token_entropy.masked_select(valid_mask).mean()
+        else:
+            entropy = torch.zeros((), device=shifted_logits.device, dtype=shifted_logits.dtype)
+
+        loss = sft_loss - self.entropy_lambda * entropy
+        outputs.loss = loss
+
+        return (loss, outputs) if return_outputs else loss
 
 def setup_savedir(args):
     # Step 3-1: Setup save dir
@@ -163,12 +213,18 @@ def main(args):
 
     # Load dataset
     train_dataset = None
-    for _train_filepath in args.train_filepath:
-        _train_dataset = preprocess_sft_dataset(args.solution_type, _train_filepath)
-        if train_dataset:
-            train_dataset = concatenate_datasets([train_dataset, _train_dataset])
-        else:
-            train_dataset = _train_dataset
+    if args.random_trajectory_per_question:
+        if args.solution_type != "agent":
+            raise ValueError("`--random_trajectory_per_question` is only supported for `solution_type=agent`.")
+        grouped_examples = preprocess_grouped_logs(args.train_filepath)
+        train_dataset = RandomTrajectoryDataset(grouped_examples)
+    else:
+        for _train_filepath in args.train_filepath:
+            _train_dataset = preprocess_sft_dataset(args.solution_type, _train_filepath)
+            if train_dataset:
+                train_dataset = concatenate_datasets([train_dataset, _train_dataset])
+            else:
+                train_dataset = _train_dataset
     if args.cot_filepath:
         _train_dataset = preprocess_sft_dataset("cot", args.cot_filepath)
         train_dataset = concatenate_datasets([train_dataset, _train_dataset]) # Add this
@@ -179,7 +235,10 @@ def main(args):
         eval_dataset = None
 
     if args.dataset_size > 0:
-        train_dataset = train_dataset[:args.dataset_size]
+        if args.random_trajectory_per_question:
+            train_dataset.grouped_examples = train_dataset.grouped_examples[:args.dataset_size]
+        else:
+            train_dataset = train_dataset[:args.dataset_size]
 
     data_module = {
         "train_dataset": train_dataset
@@ -254,13 +313,23 @@ def main(args):
             tokenizer=tokenizer
         )
 
-    trainer = SFTTrainer(
-        args.model_name if not model else model,
+    trainer_kwargs = dict(
         args=train_args,
         peft_config=peft_config,
         data_collator=collator,
-        **data_module
+        **data_module,
     )
+    if args.use_entropy_regularization:
+        trainer = EntropyRegularizedSFTTrainer(
+            args.model_name if not model else model,
+            entropy_lambda=args.entropy_lambda,
+            **trainer_kwargs,
+        )
+    else:
+        trainer = SFTTrainer(
+            args.model_name if not model else model,
+            **trainer_kwargs,
+        )
     trainer.train()
     ########## Train done ###############
 
@@ -297,6 +366,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--valid_filepath", type=str, default=None)
     parser.add_argument("--exp_id", type=str, default=None)
+    parser.add_argument("--random_trajectory_per_question", action="store_true")
+    parser.add_argument("--use_entropy_regularization", action="store_true")
+    parser.add_argument("--entropy_lambda", type=float, default=0.0)
 
     # Deepspeed
     parser.add_argument("--deepspeed", type=str, default=None)
