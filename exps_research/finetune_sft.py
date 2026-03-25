@@ -19,7 +19,7 @@ import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from accelerate import dispatch_model, infer_auto_device_map
 from accelerate.utils import get_balanced_memory
-from datasets import load_dataset, concatenate_datasets
+from datasets import Dataset, load_dataset, concatenate_datasets
 from collections import defaultdict
 
 from trl import (
@@ -66,6 +66,10 @@ class RandomTrajectoryDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         choices = self.grouped_examples[idx]
         return random.choice(choices)
+
+    def map(self, *args, **kwargs):
+        sampled_examples = [self[idx] for idx in range(len(self))]
+        return Dataset.from_list(sampled_examples).map(*args, **kwargs)
 
 
 class EntropyRegularizedSFTTrainer(SFTTrainer):
