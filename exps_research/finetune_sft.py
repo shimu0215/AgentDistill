@@ -56,6 +56,9 @@ MODEL_IDENTIFIERS = {
 class RandomTrajectoryDataset(torch.utils.data.Dataset):
     def __init__(self, grouped_examples):
         self.grouped_examples = grouped_examples
+        first_group = grouped_examples[0] if grouped_examples else []
+        first_item = first_group[0] if first_group else None
+        self.column_names = list(first_item.keys()) if isinstance(first_item, dict) else None
 
     def __len__(self):
         return len(self.grouped_examples)
