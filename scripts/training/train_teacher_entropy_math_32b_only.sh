@@ -17,7 +17,9 @@ TARGET_MODEL="Qwen/Qwen3-32B"
 TRAIN_TAG_PREFIX="${TRAIN_TAG_PREFIX:-math32b_entropy_self32}"
 EPOCHS="${EPOCHS:-2}"
 LAMBDAS=(${LAMBDAS:-0.2})
-MAX_LENGTH="${MAX_LENGTH:-4096}"
+MAX_LENGTH="${MAX_LENGTH:-2048}"
+LORA_R="${LORA_R:-16}"
+LORA_ALPHA="${LORA_ALPHA:-32}"
 
 mkdir -p logs
 
@@ -74,6 +76,8 @@ for lambda in "${LAMBDAS[@]}"; do
     --fsdp exps_research/mp_configs/fsdp.json \
     --gradient_checkpointing \
     --max_length "$MAX_LENGTH" \
+    --lora_r "$LORA_R" \
+    --lora_alpha "$LORA_ALPHA" \
     --random_trajectory_per_question \
     --use_entropy_regularization \
     --entropy_lambda "$lambda" \

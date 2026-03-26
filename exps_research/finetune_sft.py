@@ -194,8 +194,8 @@ def main(args):
         else:
             model = None
 
-        lora_r = 64
-        lora_alpha = lora_r * 2
+        lora_r = args.lora_r
+        lora_alpha = args.lora_alpha if args.lora_alpha > 0 else lora_r * 2
         peft_config = LoraConfig(
             r=lora_r,
             lora_alpha=lora_alpha,
@@ -376,6 +376,8 @@ if __name__ == "__main__":
     parser.add_argument("--random_trajectory_per_question", action="store_true")
     parser.add_argument("--use_entropy_regularization", action="store_true")
     parser.add_argument("--entropy_lambda", type=float, default=0.0)
+    parser.add_argument("--lora_r", type=int, default=64)
+    parser.add_argument("--lora_alpha", type=int, default=-1)
 
     # Deepspeed
     parser.add_argument("--deepspeed", type=str, default=None)
