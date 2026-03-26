@@ -17,7 +17,7 @@ TARGET_MODEL="Qwen/Qwen3-32B"
 TRAIN_TAG_PREFIX="${TRAIN_TAG_PREFIX:-math32b_entropy_self32}"
 EPOCHS="${EPOCHS:-2}"
 LAMBDAS=(${LAMBDAS:-0.2})
-MAX_LENGTH="${MAX_LENGTH:-8192}"
+MAX_LENGTH="${MAX_LENGTH:-4096}"
 
 mkdir -p logs
 
@@ -66,7 +66,7 @@ for lambda in "${LAMBDAS[@]}"; do
     --model_name "$TARGET_MODEL" \
     --num_epochs "$EPOCHS" \
     --batch_size 1 \
-    --gradient_accumulation_steps 2 \
+    --gradient_accumulation_steps 4 \
     --lr 2e-4 \
     --train_filepath "${FILTERED_LOGS[@]}" \
     --postfix "$postfix" \
